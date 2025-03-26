@@ -108,8 +108,8 @@ void __cdecl SetPalette(unsigned char *palette, long, unsigned long)
 }
 
 
-GraphicBufferClass* Read_PCX_File(char* name, char* Palette, void *Buff, long Size);
-void Load_Title_Screen(char *name, GraphicViewPortClass *video_page, unsigned char *palette)
+GraphicBufferClass* Read_PCX_File(char const* name, char* Palette, void *Buff, long Size);
+void Load_Title_Screen(char const *name, GraphicViewPortClass *video_page, unsigned char *palette)
 {
 
 	GraphicBufferClass *load_buffer;
@@ -161,7 +161,7 @@ void Load_Title_Screen(char *name, GraphicViewPortClass *video_page, unsigned ch
 							 }
 
 
-GraphicBufferClass* Read_PCX_File(char* name, char* palette, void *Buff, long Size)
+GraphicBufferClass* Read_PCX_File(char const* name, char* palette, void *Buff, long Size)
 {
 	unsigned					i, j;
 	unsigned					rle;
