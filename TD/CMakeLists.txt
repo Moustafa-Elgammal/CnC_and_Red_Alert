@@ -183,3 +183,5 @@ target_compile_definitions(tdsdl PRIVATE
 )
 target_include_directories(tdsdl PRIVATE ../RA) # should probably structure this better
 target_link_libraries(tdsdl PRIVATE port sdllib vqa32)
+
+install(TARGETS tdsdl)

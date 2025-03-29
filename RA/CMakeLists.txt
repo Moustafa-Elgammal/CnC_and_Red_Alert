@@ -280,6 +280,8 @@ target_compile_definitions(rasdl PRIVATE
 )
 target_link_libraries(rasdl PRIVATE tech jshell port sdllib vqa32) # mpgdll wwipx32
 
+install(TARGETS rasdl)
+
 if(EMSCRIPTEN)
 	set_target_properties(rasdl PROPERTIES
 		SUFFIX ".html"
