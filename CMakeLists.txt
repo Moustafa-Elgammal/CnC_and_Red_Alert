@@ -14,10 +14,10 @@ else()
     # for noise
     add_compile_options(-Wno-write-strings)
     # workarounds
-    add_compile_definitions(-D__cdecl= -D__far= -D__stdcall= -Dcdecl= -Dfar=)
+    add_compile_definitions(__cdecl= __far= __stdcall= cdecl= far=)
 endif()
 
-add_compile_definitions(-DWIN32) # hopefully easier than DOS
+add_compile_definitions(WIN32) # hopefully easier than DOS
 
 
 add_subdirectory(port)
