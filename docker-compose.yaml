@@ -1,0 +1,10 @@
+services:
+
+  gcc:
+    build: docker-sdl-compiler
+    volumes:
+      - './:/game'
+    command:
+      - "tail"
+      - "-f"
+      - "/dev/null"
