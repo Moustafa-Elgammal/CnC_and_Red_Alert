@@ -951,6 +951,9 @@ void BuildingClass::AI(void)
 	*/
 	TechnoClass::AI();
 
+	if(!IsActive)
+		return;
+
 	/*
 	**	If now is a good time to act on a new mission, then do so. This occurs here because
 	**	some AI event may have requested a mission change (usually from another mission
