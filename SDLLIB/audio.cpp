@@ -36,6 +36,9 @@ static const int16_t ima_adpcm_step_table[89] = {
     15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767 
 };
 
+static const int8_t ww_2bitdecode[] = {-2,-1,0,1};
+static const int8_t ww_4bitdecode[] = {-9,-8,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,8};
+
 SFX_Type SoundType;
 Sample_Type SampleType;
 
@@ -117,6 +120,126 @@ static uint8_t *DecodeADPCMBlock(ChannelState &chan, int block_size, uint8_t *in
     return in_ptr;
 }
 
+static uint8_t *DecodeWestwoodBlock(ChannelState &chan, int block_size, uint8_t *in_ptr)
+{
+    int prev_sample = 0x80; // Previous sample (starting value).
+
+    auto in_end = in_ptr + block_size;
+
+    uint8_t sample_buf[4];
+
+    while(in_ptr != in_end)
+    {
+        auto code = *in_ptr++; // Get code byte
+        //incount++
+        int data = code & 0x3F;
+        code >>= 6;
+
+        if(code == 2) // Raw sequence?
+        {
+            // The code contains either a 5 bit delta or a count of
+            // raw samples to dump out.
+            if(data & 0x20)
+            {
+                // The lower 5 bits are actually a signed delta.
+                // Sign extend the delta and add it to the stream.
+                int8_t v = (data & 0x10) ? (data | 0xE0) : (data & 0xF);
+
+                prev_sample += v;
+
+                sample_buf[0] = prev_sample;
+                SDL_AudioStreamPut(chan.stream, sample_buf, 1);
+            }
+            else
+            {
+                // The lower 5 bits hold a count of the number of raw
+                // samples that follow this code. Dump these samples to
+                // the output buffer.
+
+                data++;
+                
+                // put samples
+                SDL_AudioStreamPut(chan.stream, in_ptr, data);
+                
+                in_ptr += data;
+
+                // Set "previous" value.
+                prev_sample = in_ptr[-1];
+            }
+        }
+        else
+        {
+            // Check to see if this is a 4 bit delta code sequence.
+            data++;
+            if(code == 1)
+            {
+                // A sequence of 4bit deltas follow. data equals the
+                // number of nibble packed delta bytes to process.
+
+                do
+                {
+                    uint8_t deltacodes = *in_ptr++;
+
+                    for(int i = 0; i < 2; i++, deltacodes >>= 4)
+                    {
+                        prev_sample += ww_4bitdecode[deltacodes & 0xF];
+
+                        if(prev_sample < 0)
+                            prev_sample = 0;
+                        else if(prev_sample > 0xFF)
+                            prev_sample = 0xFF;
+
+                        sample_buf[i] = prev_sample;
+                    }
+
+                    SDL_AudioStreamPut(chan.stream, sample_buf, 2);
+                }
+                while(--data);
+
+            }
+            else if(code == 0)
+            {
+                // A sequence of 2bit deltas follow. data equals the
+                // number of packed delta bytes to process.
+
+                do
+                {
+                    uint8_t deltacodes = *in_ptr++;
+
+                    for(int i = 0; i < 4; i++, deltacodes >>= 2)
+                    {
+                        prev_sample += ww_2bitdecode[deltacodes & 3];
+
+                        if(prev_sample < 0)
+                            prev_sample = 0;
+                        else if(prev_sample > 0xFF)
+                            prev_sample = 0xFF;
+
+                        sample_buf[i] = prev_sample;
+                    }
+
+
+                    SDL_AudioStreamPut(chan.stream, sample_buf, 4);
+                }
+                while(--data);
+            }
+            else
+            {
+                // There is a run of zero deltas.  Zero deltas merely duplicate
+                // the 'previous' sample the requested number of times.
+                do
+                {
+                    sample_buf[0] = prev_sample;
+                    SDL_AudioStreamPut(chan.stream, sample_buf, 1);
+                }
+                while(--data);
+            }
+        }
+    }
+
+    return in_ptr;
+}
+
 static bool RefillStream(ChannelState &chan)
 {
     uint32_t max_update = ObtainedSpec.samples; // assume the target rate is not lower
@@ -124,28 +247,30 @@ static bool RefillStream(ChannelState &chan)
     if(chan.offset == chan.length)
         return false;
 
-    if(chan.compression == SCOMP_SOS)
+    int samples_to_gen = std::min(max_update, chan.length - chan.offset);
+    // read blocks until we have enough samples
+    while(samples_to_gen > 0)
     {
-        // ADPCM
-        int samples_to_gen = std::min(max_update, chan.length - chan.offset);
-        // read blocks until we have enough samples
-        while(samples_to_gen > 0)
+        // read a block
+        uint16_t block_in_size = *(uint16_t *)chan.in_ptr;
+        uint16_t block_out_size = *(uint16_t *)(chan.in_ptr + 2);
+        chan.in_ptr += 8; // there's also a 0000DEAF magic value
+
+        if(block_in_size == block_out_size) // raw block
         {
-            // read a block
-            uint16_t block_in_size = *(uint16_t *)chan.in_ptr;
-            uint16_t block_out_size = *(uint16_t *)(chan.in_ptr + 2);
-            chan.in_ptr += 8; // there's also a 0000DEAF magic value
-
-            // assert(block_out_size == block_in_size * 4);
-
-            chan.in_ptr = DecodeADPCMBlock(chan, block_in_size, chan.in_ptr);
-
-            chan.offset += block_out_size / 2;
-            samples_to_gen -= block_out_size / 2;
+            SDL_AudioStreamPut(chan.stream, chan.in_ptr, block_in_size);
+            chan.in_ptr += block_in_size;
         }
+        else if(chan.compression == SCOMP_SOS) // ADPCM
+            chan.in_ptr = DecodeADPCMBlock(chan, block_in_size, chan.in_ptr);
+        else if(chan.compression == SCOMP_WESTWOOD)
+            chan.in_ptr = DecodeWestwoodBlock(chan, block_in_size, chan.in_ptr);
+        else
+            return false; // shouldn't happen, but...
+
+        chan.offset += block_out_size / (chan.bits / 8);
+        samples_to_gen -= block_out_size / (chan.bits / 8);
     }
-    else
-        return false; // shouldn't happen, but...
 
     // written all data, flush the stream
     if(chan.offset == chan.length)
@@ -165,7 +290,7 @@ static void ResetStream(ChannelState &chan, AUDHeaderType *header)
         if(chan.stream)
             SDL_FreeAudioStream(chan.stream);
 
-        chan.stream = SDL_NewAudioStream(bits == 16 ? AUDIO_S16 : AUDIO_S8, channels, header->Rate, ObtainedSpec.format, ObtainedSpec.channels, ObtainedSpec.freq);
+        chan.stream = SDL_NewAudioStream(bits == 16 ? AUDIO_S16 : AUDIO_U8, channels, header->Rate, ObtainedSpec.format, ObtainedSpec.channels, ObtainedSpec.freq);
     }
     else
         SDL_AudioStreamClear(chan.stream);
@@ -447,7 +572,9 @@ int Play_Sample_Handle(void const *sample, int priority, int volume, signed shor
     int channels = header->Flags & AUD_FLAG_STEREO ? 2 : 1;
     int bits = header->Flags & AUD_FLAG_16BIT ? 16 : 8;
 
-    if(header->Compression != SCOMP_SOS || channels != 1 || bits != 16)
+    bool valid_comp = (header->Compression == SCOMP_SOS && bits == 16) || (header->Compression == SCOMP_WESTWOOD && bits == 8);
+
+    if(!valid_comp || channels != 1)
     {
         printf("\trate %i size %i/%i channels %i bits %i comp %i\n", header->Rate, header->Size, header->UncompSize, channels, bits, header->Compression);
         return -1;
