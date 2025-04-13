@@ -1,0 +1,3 @@
+[submodule "docker-sdl-compiler"]
+	path = docker-sdl-compiler
+	url = git@github.com:Moustafa-Elgammal/docker-sdl-compiler.git
