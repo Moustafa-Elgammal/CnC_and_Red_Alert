@@ -2,6 +2,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <cstdlib>
+#include <cstring>
+#include <cctype>
 #include <glob.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -178,6 +181,18 @@ bool Find_First_File(const char *path_glob, FindFileState &state)
 {
     auto glob_buf = new glob_t;
     int ret = glob(path_glob, GLOB_MARK, NULL, glob_buf);
+
+    // also search for lowercase filenames
+    if(ret == 0 || ret == GLOB_NOMATCH)
+    {
+        auto lower_glob = strdup(path_glob);
+        for(auto c = lower_glob; *c; c++)
+            *c = tolower(*c);
+
+        ret = glob(lower_glob, GLOB_MARK | GLOB_APPEND, NULL, glob_buf);
+
+        free(lower_glob);
+    }
 
     if(ret)
     {
