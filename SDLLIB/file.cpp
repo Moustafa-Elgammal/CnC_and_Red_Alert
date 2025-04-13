@@ -189,7 +189,9 @@ bool Find_First_File(const char *path_glob, FindFileState &state)
         for(auto c = lower_glob; *c; c++)
             *c = tolower(*c);
 
-        ret = glob(lower_glob, GLOB_MARK | GLOB_APPEND, NULL, glob_buf);
+        int ret2 = glob(lower_glob, GLOB_MARK | GLOB_APPEND, NULL, glob_buf);
+        if(ret2 != GLOB_NOMATCH)
+            ret = ret2;
 
         free(lower_glob);
     }
