@@ -54,6 +54,11 @@ static int16_t BFPredNegTable[]
 	0, 0, 0, 0, 0, 0, 0, 0
 };
 
+static int16_t BFPredTable[]
+{
+	1, 3, 2, 5, 2, 3, 4, 1
+};
+
 // copied from blit funcs
 inline int Make_Code(int x, int y, int w, int h)
 {
@@ -114,6 +119,19 @@ inline void Do_Old_Blit(int line_count, int pixel_count, uint8_t *src_offset, ui
             uint8_t pixel = *src_offset++;
             if(pixel || !(flags & BLIT_TRANSPARENT))
             {
+				if(flags & BLIT_PREDATOR)
+				{
+					int pred = BFPartialCount + BFPartialPred;
+					BFPartialCount = pred & 0xFF;
+					// is this a predator pixel?
+					if(pred >> 8)
+					{
+						// pick up a color offset a pseudo-random amount from the current viewport address
+						pixel = dst_offset[BFPredTable[BFPredOffset >> 1]];
+						BFPredOffset = (BFPredOffset + 2) & PRED_MASK;
+					}
+				}
+
                 if(flags & BLIT_GHOST)
                 {
                     uint8_t is_trans = IsTranslucent[pixel];
@@ -357,11 +375,30 @@ extern "C" long Buffer_Frame_To_Page(int x, int y, int w, int h, void *src, Grap
             case BLIT_FADING | BLIT_GHOST | BLIT_TRANSPARENT: // BF_Ghost_Fading_Trans
                 Do_Old_Blit<BLIT_FADING | BLIT_GHOST | BLIT_TRANSPARENT>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
                 break;
-
-            // TODO: predator
-
-			default:
-				printf("%s old f %x\n", __func__, jflags);
+			case BLIT_PREDATOR: // BF_Predator
+				Do_Old_Blit<BLIT_PREDATOR>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_TRANSPARENT: // BF_Predator_Trans
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_TRANSPARENT>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_GHOST: // BF_Predator_Ghost
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_GHOST>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_GHOST | BLIT_TRANSPARENT: // BF_Predator_Ghost_Trans
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_GHOST | BLIT_TRANSPARENT>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_FADING: // BF_Predator_Fading
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_FADING>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_FADING | BLIT_TRANSPARENT: // BF_Predator_Fading_Trans
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_FADING | BLIT_TRANSPARENT>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_FADING | BLIT_GHOST: // BF_Predator_Ghost_Fading
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_FADING | BLIT_GHOST>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
+			case BLIT_PREDATOR | BLIT_FADING | BLIT_GHOST | BLIT_TRANSPARENT: // BF_Predator_Ghost_Fading_Trans
+				Do_Old_Blit<BLIT_PREDATOR | BLIT_FADING | BLIT_GHOST | BLIT_TRANSPARENT>(line_count, pixel_count, src_offset, dst_offset, src_adjust_width, dst_adjust_width, Translucent, IsTranslucent, FadingNum, FadingTable);
+				break;
 		}
 	}
 	else
